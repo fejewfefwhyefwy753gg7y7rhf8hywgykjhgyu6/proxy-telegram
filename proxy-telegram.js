@@ -6,8 +6,10 @@ async function getGeoLocationMultiAPI(ip) {
             url: `https://ipapi.co/${ip}/json/`,
             parser: (data) => ({
                 country: data.country_name || 'Неизвестно',
+                countryCode: data.country_code || 'N/A',
+                region: data.region || 'Неизвестно',
                 city: data.city || 'Неизвестно',
-                isp: data.org || 'Неизвестно',
+                isp: data.org || 'Неизвестно'
             })
         },
         {
@@ -17,8 +19,10 @@ async function getGeoLocationMultiAPI(ip) {
                 if (data.status !== 'success') throw new Error('API ip-api.com вернул ошибку');
                 return {
                     country: data.country || 'Неизвестно',
+                    countryCode: data.countryCode || 'N/A',
+                    region: data.regionName || 'Неизвестно',
                     city: data.city || 'Неизвестно',
-                    isp: data.isp || 'Неизвестно',
+                    isp: data.isp || 'Неизвестно'
                 };
             }
         },
@@ -27,10 +31,12 @@ async function getGeoLocationMultiAPI(ip) {
             url: `https://ipinfo.io/${ip}/json`,
             parser: (data) => ({
                 country: data.country || 'Неизвестно',
+                countryCode: data.country || 'N/A',
+                region: data.region || 'Неизвестно',
                 city: data.city || 'Неизвестно',
-                isp: data.org || 'Неизвестно',
+                isp: data.org || 'Неизвестно'
             })
-        },
+        }
     ];
 
     for (const api of apis) {
@@ -40,8 +46,7 @@ async function getGeoLocationMultiAPI(ip) {
             });
             if (response.ok) {
                 const data = await response.json();
-                const geoData = api.parser(data);
-                return { ...geoData, api: api.name };
+                return { ...api.parser(data), api: api.name };
             }
         } catch (error) {
             console.error(`Ошибка API ${api.name}:`, error.message);
@@ -49,10 +54,12 @@ async function getGeoLocationMultiAPI(ip) {
     }
     
     return {
-        country: 'Ошибка',
-        city: 'Ошибка',
-        isp: 'Ошибка',
-        api: 'Все недоступны'
+        country: 'Ошибка получения',
+        countryCode: 'N/A',
+        region: 'Ошибка получения',
+        city: 'Ошибка получения',
+        isp: 'Ошибка получения',
+        api: 'Все API недоступны'
     };
 }
 
@@ -60,15 +67,25 @@ async function getGeoLocationMultiAPI(ip) {
 function formatTelegramMessage(userInfo) {
     const now = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
     const geo = userInfo.geoLocation;
-    
-    return `<b>🔍 Новая информация</b>\n\n` +
-           `<b>Время:</b> <code>${now}</code>\n` +
-           `<b>IP:</b> <code>${userInfo.ip}</code>\n` +
-           `<b>Страна:</b> <code>${geo.country}</code>\n` +
-           `<b>Город:</b> <code>${geo.city}</code>\n` +
-           `<b>Провайдер:</b> <code>${geo.isp}</code>\n` +
-           `<b>User Agent:</b> <code>${userInfo.userAgent}</code>\n` +
-           `<b>API:</b> <code>${geo.api}</code>`;
+
+    return `<b>🔍 Новая информация о пользователе</b>\n\n` +
+        `<blockquote>` +
+        `<b>⏰ Время сбора данных</b>\n` +
+        `<code>${now}</code>\n\n` +
+        `<b>💻 Информация о браузере</b>\n` +
+        `<code>User Agent: ${userInfo.userAgent}</code>\n\n` +
+        `<b>🌐 Сетевая информация</b>\n` +
+        `<code>IP адрес: ${userInfo.ip}</code>\n\n` +
+        `<b>🌍 Геолокация</b>\n` +
+        `<code>Страна: ${geo.country} (${geo.countryCode})\n` +
+        `Регион: ${geo.region}\n` +
+        `Город: ${geo.city}\n` +
+        `Провайдер: ${geo.isp}\n` +
+        `API: ${geo.api}</code>\n\n` +
+        `<b>🖥️ Системная информация</b>\n` +
+        `<code>Разрешение экрана: ${userInfo.screenResolution}\n` +
+        `Часовой пояс: ${userInfo.timezone}</code>` +
+        `</blockquote>`;
 }
 
 // Отправка сообщения в Telegram
@@ -115,6 +132,11 @@ Deno.serve(async (request) => {
 
     try {
         const userInfo = await request.json();
+        // Убедимся, что все поля существуют, чтобы избежать ошибок
+        userInfo.userAgent = userInfo.userAgent || 'N/A';
+        userInfo.screenResolution = userInfo.screenResolution || 'N/A';
+        userInfo.timezone = userInfo.timezone || 'N/A';
+        
         const geoInfo = await getGeoLocationMultiAPI(userInfo.ip);
         userInfo.geoLocation = geoInfo;
         
